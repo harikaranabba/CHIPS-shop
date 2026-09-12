@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Products - Shop Billing System</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <header class="topbar">
+            <h1>🏪 Shop Billing System</h1>
+            <span>Product Management</span>
+        </header>
+
+        <main class="content">
+
+            <div class="page-header">
+                <div>
+                    <h2>Products</h2>
+                    <p>Manage your products and price per kilogram.</p>
+                </div>
+
+                <button class="add-btn" onclick="openProductForm()">
+                    + Add Product
+                </button>
+            </div>
+
+            <div class="search-box">
+                <input
+                    type="text"
+                    id="searchProduct"
+                    placeholder="🔍 Search product..."
+                    onkeyup="displayProducts()"
+                >
+            </div>
+
+            <div class="table-card">
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Product Name</th>
+                            <th>Price / KG</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="productTable">
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </main>
+
+    </div>
+
+
+    <!-- ADD PRODUCT POPUP -->
+
+    <div class="modal" id="productModal">
+
+        <div class="modal-box">
+
+            <div class="modal-header">
+                <h2 id="formTitle">Add Product</h2>
+
+                <button onclick="closeProductForm()">×</button>
+            </div>
+
+            <div class="form-group">
+
+                <label>Product Name</label>
+
+                <input
+                    type="text"
+                    id="productName"
+                    placeholder="Example: Mixture"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>Price per KG</label>
+
+                <input
+                    type="number"
+                    id="productPrice"
+                    placeholder="Example: 240"
+                >
+
+            </div>
+
+
+            <div class="modal-actions">
+
+                <button
+                    class="cancel-btn"
+                    onclick="closeProductForm()">
+                    Cancel
+                </button>
+
+                <button
+                    class="save-btn"
+                    onclick="saveProduct()">
+                    Save Product
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script src="js/script.js"></script>
+
+</body>
+</html>

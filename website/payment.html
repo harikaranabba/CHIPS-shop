@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>PAYMENT</h1>
+
+    <div class="card">
+
+        <h3>Order Summary</h3>
+
+        <div class="summary">
+            <p>
+                <span>Product</span>
+                <strong id="product"></strong>
+            </p>
+
+            <p>
+                <span>Price / KG</span>
+                <strong id="price"></strong>
+            </p>
+
+            <p>
+                <span>Quantity</span>
+                <strong id="quantity"></strong>
+            </p>
+
+            <hr>
+
+            <p class="grand-total">
+                <span>Total</span>
+                <strong id="total"></strong>
+            </p>
+        </div>
+
+        <button onclick="payNow()">
+            PAY NOW
+        </button>
+
+        <button class="back-button" onclick="goBack()">
+            ← BACK
+        </button>
+
+    </div>
+
+</div>
+
+<script>
+
+    const order = JSON.parse(localStorage.getItem("shopOrder"));
+
+    if (!order) {
+        alert("No order found.");
+        window.location.href = "index.html";
+    }
+
+    document.getElementById("product").textContent = order.product;
+
+    document.getElementById("price").textContent =
+        "₹" + order.price.toFixed(2);
+
+    document.getElementById("quantity").textContent =
+        order.quantity + " " + order.unit;
+
+    document.getElementById("total").textContent =
+        "₹" + order.total.toFixed(2);
+
+    async function payNow() {
+  const phone = prompt("Enter your 10-digit mobile number:");
+
+  if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+    alert("Please enter a valid 10-digit mobile number.");
+    return;
+  }
+  try {
+    const response = await fetch("/create-order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+  amount: order.total,
+  phone: phone,
+  product: order.product,
+  quantity: order.quantity,
+  unit: order.unit
+})
+    });
+    const data = await response.json();
+    if (!data.success) {
+      alert("Unable to create payment order.");
+      return;
+    }
+    const cashfree = Cashfree({
+      mode: "production"
+    });
+    await cashfree.checkout({
+      paymentSessionId: data.paymentSessionId,
+      redirectTarget: "_self"
+    });
+  } catch (error) {
+    console.error(error);
+    alert("Payment could not be started.");
+  }
+}
+async function checkPaymentStatus() {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("order_id");
+
+    if (!orderId) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/payment-status?order_id=${encodeURIComponent(orderId)}`
+        );
+
+        const data = await response.json();
+
+        if (data.success) {
+            const status = data.order.order_status;
+
+            if (status === "PAID") {
+                document.body.innerHTML = `
+                    <div style="text-align:center; margin-top:100px; font-family:Arial;">
+                        <h1>✅ Payment Successful!</h1>
+                        <h2>₹${data.order.order_amount}</h2>
+                        <p>Thank you for your order.</p>
+                        <button onclick="window.location.href='index.html'">
+                            Back to Home
+                        </button>
+                    </div>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error("Payment status error:", error);
+    }
+}
+
+checkPaymentStatus();
+
+    function goBack() {
+        window.location.href = "index.html";
+    }
+</script>
+
+</body>
+</html> 
