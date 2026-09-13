@@ -9,10 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-console.log("APP ID loaded:", !!process.env.CASHFREE_APP_ID);
-console.log("SECRET loaded:", !!process.env.CASHFREE_SECRET_KEY);
-console.log("SUPABASE URL loaded:", !!process.env.SUPABASE_URL);
-console.log("SUPABASE KEY loaded:", !!process.env.SUPABASE_KEY);
+console.log("APP ID (masked):", process.env.CASHFREE_APP_ID?.slice(0,4) + "..." + process.env.CASHFREE_APP_ID?.slice(-4));
+console.log("APP ID length:", process.env.CASHFREE_APP_ID?.length);
+console.log("SECRET length:", process.env.CASHFREE_SECRET_KEY?.length);
 
 const { Cashfree, CFEnvironment } = require("cashfree-pg");
 
