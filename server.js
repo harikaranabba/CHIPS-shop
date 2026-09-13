@@ -38,7 +38,12 @@ const cashfree = new Cashfree(
 app.post("/create-order", async (req, res) => {
   try {
     console.log("CREATE ORDER BODY:", req.body);
+    console.log("APP ID (masked):", process.env.CASHFREE_APP_ID?.slice(0,4) + "..." + process.env.CASHFREE_APP_ID?.slice(-4));
+    console.log("APP ID length:", process.env.CASHFREE_APP_ID?.length);
+    console.log("SECRET length:", process.env.CASHFREE_SECRET_KEY?.length);
+    
     const { amount, phone, product, quantity, unit } = req.body;
+    // ... rest stays the same
 
     const orderId = "chips_" + Date.now();
 
