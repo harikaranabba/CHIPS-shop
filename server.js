@@ -56,10 +56,11 @@ app.post("/create-order", async (req, res) => {
         customer_phone: phone
       },
       order_meta: {
-        return_url: `https://sri-ram-hot-chips.vercel.app/payment.html?order_id=${encodeURIComponent(orderId)}`
+        return_url: `https://chips-shop-f54z.vercel.app/payment.html?order_id=${encodeURIComponent(orderId)}`
       }
     };
-
+    console.log("CF ENVIRONMENT VALUE:", CFEnvironment.SANDBOX);
+    console.log("CF OBJECT ENVIRONMENT:", cashfree.XEnvironment);
     const response = await cashfree.PGCreateOrder(request);
 
     const dbResponse = await fetch(
