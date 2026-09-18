@@ -1,68 +1,84 @@
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
 require("dotenv").config();
 
-const { createClient } = require("@supabase/supabase-js");
+const Razorpay = require("razorpay");
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+const app = express();
+const path = require("path");
 
-console.log("APP ID loaded:", !!process.env.CASHFREE_APP_ID);
-console.log("SECRET loaded:", !!process.env.CASHFREE_SECRET_KEY);
+// ===============================
+// SUPABASE
+// ===============================
+
 console.log("SUPABASE URL loaded:", !!process.env.SUPABASE_URL);
 console.log("SUPABASE KEY loaded:", !!process.env.SUPABASE_KEY);
 
+// ===============================
+// RAZORPAY
+// ===============================
 
-console.log("APP ID (masked):", process.env.CASHFREE_APP_ID?.slice(0,4) + "..." + process.env.CASHFREE_APP_ID?.slice(-4));
-console.log("APP ID length:", process.env.CASHFREE_APP_ID?.length);
-console.log("SECRET length:", process.env.CASHFREE_SECRET_KEY?.length);
+console.log("RAZORPAY KEY loaded:", !!process.env.RAZORPAY_KEY_ID);
+console.log("RAZORPAY SECRET loaded:", !!process.env.RAZORPAY_KEY_SECRET);
 
-const { Cashfree, CFEnvironment } = require("cashfree-pg");
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
-const app = express();
+// ===============================
+// MIDDLEWARE
+// ===============================
 
 app.use(cors());
 app.use(express.json());
-const path = require("path");
 
 app.use(express.static(path.join(__dirname, "website")));
 
-const cashfree = new Cashfree(
-  CFEnvironment.SANDBOX,
-  process.env.CASHFREE_APP_ID,
-  process.env.CASHFREE_SECRET_KEY
-);
+// ===============================
+// CREATE RAZORPAY ORDER
+// ===============================
 
 app.post("/create-order", async (req, res) => {
   try {
     console.log("CREATE ORDER BODY:", req.body);
-    console.log("APP ID (masked):", process.env.CASHFREE_APP_ID?.slice(0,4) + "..." + process.env.CASHFREE_APP_ID?.slice(-4));
-    console.log("APP ID length:", process.env.CASHFREE_APP_ID?.length);
-    console.log("SECRET length:", process.env.CASHFREE_SECRET_KEY?.length);
-    
-    const { amount, phone, product, quantity, unit } = req.body;
-    // ... rest stays the same
 
-    const orderId = "chips_" + Date.now();
+    const {
+      amount,
+      phone,
+      product,
+      quantity,
+      unit
+    } = req.body;
 
-    const request = {
-      order_amount: Number(Number(amount).toFixed(2)),
-      order_currency: "INR",
-      order_id: orderId,
-      customer_details: {
-        customer_id: "customer_" + Date.now(),
-        customer_phone: phone
-      },
-      order_meta: {
-        return_url: `https://chips-shop-f54z.vercel.app/payment.html?order_id=${encodeURIComponent(orderId)}`
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid amount"
+      });
+    }
+
+    // Razorpay expects amount in paise
+    const amountInPaise = Math.round(Number(amount) * 100);
+
+    const receipt = "billdesk_" + Date.now();
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: amountInPaise,
+      currency: "INR",
+      receipt: receipt,
+      notes: {
+        product: String(product || ""),
+        quantity: String(quantity || ""),
+        unit: String(unit || ""),
+        phone: String(phone || "")
       }
-    };
-    console.log("CF ENVIRONMENT VALUE:", CFEnvironment.SANDBOX);
-    console.log("CF OBJECT ENVIRONMENT:", cashfree.XEnvironment);
-    const response = await cashfree.PGCreateOrder(request);
+    });
 
+    console.log("RAZORPAY ORDER CREATED:", razorpayOrder.id);
+
+    // Save order in Supabase
     const dbResponse = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/orders`,
       {
@@ -74,13 +90,13 @@ app.post("/create-order", async (req, res) => {
           Prefer: "return=representation"
         },
         body: JSON.stringify({
-          order_id: response.data.order_id,
+          order_id: razorpayOrder.id,
           product: product,
           amount: Number(amount),
           quantity: quantity,
           unit: unit,
           phone: phone,
-          payment_session_id: response.data.payment_session_id
+          payment_status: "CREATED"
         })
       }
     );
@@ -90,26 +106,129 @@ app.post("/create-order", async (req, res) => {
     console.log("SUPABASE STATUS:", dbResponse.status);
     console.log("SUPABASE RESPONSE:", dbText);
 
-
-
-
     res.json({
       success: true,
-      orderId: response.data.order_id,
-      paymentSessionId: response.data.payment_session_id
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      keyId: process.env.RAZORPAY_KEY_ID
     });
 
   } catch (error) {
-    console.log("FULL CASHFREE ERROR:", error.response?.data || error);
+    console.log(
+      "RAZORPAY CREATE ORDER ERROR:",
+      error
+    );
 
     res.status(500).json({
       success: false,
-      message: error.response?.data?.message || "Unable to create payment order"
+      message: "Unable to create payment order"
     });
   }
 });
 
-const PORT = 3000;
+// ===============================
+// VERIFY RAZORPAY PAYMENT
+// ===============================
+
+app.post("/verify-payment", async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    } = req.body;
+
+    if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification details are missing"
+      });
+    }
+
+    // Create expected signature
+    const generatedSignature = crypto
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_KEY_SECRET
+      )
+      .update(
+        razorpay_order_id + "|" + razorpay_payment_id
+      )
+      .digest("hex");
+
+    // Verify signature
+    if (generatedSignature !== razorpay_signature) {
+      console.log("RAZORPAY SIGNATURE INVALID");
+
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed"
+      });
+    }
+
+    console.log("RAZORPAY SIGNATURE VERIFIED");
+
+    // Fetch payment details from Razorpay
+    const payment = await razorpay.payments.fetch(
+      razorpay_payment_id
+    );
+
+    console.log(
+      "RAZORPAY PAYMENT STATUS:",
+      payment.status
+    );
+
+    // Update Supabase
+    const dbResponse = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/orders?order_id=eq.${encodeURIComponent(razorpay_order_id)}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: process.env.SUPABASE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify({
+          payment_status: payment.status,
+          payment_id: razorpay_payment_id
+        })
+      }
+    );
+
+    const dbText = await dbResponse.text();
+
+    console.log("DATABASE UPDATE:", dbText);
+
+    res.json({
+      success: true,
+      paymentStatus: payment.status,
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id
+    });
+
+  } catch (error) {
+    console.log(
+      "RAZORPAY VERIFY ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to verify payment"
+    });
+  }
+});
+
+// ===============================
+// PAYMENT STATUS
+// ===============================
+
 app.get("/payment-status", async (req, res) => {
   try {
     const { order_id } = req.query;
@@ -121,40 +240,22 @@ app.get("/payment-status", async (req, res) => {
       });
     }
 
-    const response = await cashfree.PGFetchOrder(order_id);
+    const order = await razorpay.orders.fetch(order_id);
 
-    console.log("CASHFREE STATUS:", response.data.order_status);
-
-    const dbResponse = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/orders?order_id=eq.${encodeURIComponent(order_id)}`,
-      {
-        method: "PATCH",
-        headers: {
-          apikey: process.env.SUPABASE_KEY,
-          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation"
-        },
-        body: JSON.stringify({
-          payment_status: response.data.order_status
-        })
-      }
+    console.log(
+      "RAZORPAY ORDER STATUS:",
+      order.status
     );
-
-    const dbText = await dbResponse.text();
-
-    console.log("PAYMENT STATUS:", response.data.order_status);
-    console.log("DATABASE UPDATE:", dbText);
 
     res.json({
       success: true,
-      order: response.data
+      order: order
     });
 
   } catch (error) {
     console.log(
-      "CASHFREE STATUS ERROR:",
-      error.response?.data || error
+      "RAZORPAY STATUS ERROR:",
+      error
     );
 
     res.status(500).json({
@@ -164,8 +265,14 @@ app.get("/payment-status", async (req, res) => {
   }
 });
 
+// ===============================
+// SERVER
+// ===============================
+
+const PORT = 3000;
+
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(
+    `BILL DESK server running at http://localhost:${PORT}`
+  );
 });
-
-
