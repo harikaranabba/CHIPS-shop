@@ -276,3 +276,4 @@ app.listen(PORT, () => {
     `BILL DESK server running at http://localhost:${PORT}`
   );
 });
+module.exports = app;
