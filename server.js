@@ -219,8 +219,9 @@ app.post("/verify-payment", async (req, res) => {
     );
 
     res.status(500).json({
-      success: false,
-      message: "Unable to verify payment"
+   success: false,
+   message: "Unable to create payment order",
+   error: error.message
     });
   }
 });
@@ -271,9 +272,12 @@ app.get("/payment-status", async (req, res) => {
 
 const PORT = 3000;
 
-app.listen(PORT, () => {
-  console.log(
-    `BILL DESK server running at http://localhost:${PORT}`
-  );
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(
+      `BILL DESK server running at http://localhost:${PORT}`
+    );
+  });
+}
+
 module.exports = app;
